@@ -90,9 +90,11 @@ button { font-family: inherit; }
 .app { height: 100%; display: flex; flex-direction: column; }
 
 .topbar {
-  height: var(--topbar-h);
+  /* border-box: add the safe-area inset to the height instead of letting padding-top
+     eat into it, otherwise the bar collapses under the notch (installed iOS PWA). */
+  height: calc(var(--topbar-h) + env(safe-area-inset-top, 0));
   flex: none;
-  display: flex;
+  display: none;               /* editor chrome: shown only in the editor view */
   align-items: center;
   gap: 10px;
   padding: 0 10px;
@@ -100,7 +102,7 @@ button { font-family: inherit; }
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
-.brand { color: var(--accent); font-weight: 700; letter-spacing: 1px; }
+body.view-editor .topbar { display: flex; }
 .current-path { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 .spacer { flex: 1; }
@@ -119,11 +121,15 @@ body.has-file #saveBtn { display: inline-block; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+  padding-top: env(safe-area-inset-top, 0);  /* no topbar above the tree on mobile: clear the notch */
 }
 .sidebar-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  height: var(--topbar-h);   /* match the editor topbar so their bottom borders align */
+  flex: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px; border-bottom: 1px solid var(--border);
 }
+.sidebar-head .sidebar-actions { margin-left: auto; }
 .repo-name { color: var(--muted); font-size: 12px; }
 .tree { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 6px 0; }
 .tree-note { padding: 8px 12px; color: var(--danger); font-size: 12px; }
@@ -133,8 +139,8 @@ body.has-file #saveBtn { display: inline-block; }
 .tree > ul { padding-left: 4px; }
 .row {
   display: flex; align-items: center; gap: 6px;
-  padding: 3px 8px; cursor: pointer; border-radius: 4px;
-  white-space: nowrap;
+  padding: 2px 8px; cursor: pointer; border-radius: 4px;
+  white-space: nowrap; line-height: 1.3;
 }
 .row:hover { background: var(--panel); }
 .row .name { overflow: hidden; text-overflow: ellipsis; }
@@ -147,21 +153,51 @@ body.has-file #saveBtn { display: inline-block; }
 .row-actions .icon-btn { font-size: 13px; padding: 2px 5px; }
 
 /* --- editor --- */
-.editor { flex: 1; min-width: 0; display: flex; }
+.editor { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.editor-area { position: relative; flex: 1; min-height: 0; }
+
+/* Shared text metrics: the transparent textarea is layered exactly over the
+   highlight <pre>, so both must wrap identically. The textarea's scrollbar is
+   hidden so its content width (hence wrapping) matches the pre. */
 .content {
-  flex: 1;
-  resize: none;
+  position: absolute;
+  inset: 0;
+  margin: 0;
   border: none;
-  outline: none;
-  background: var(--bg);
-  color: var(--text);
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.55;
   padding: 16px 18px;
   tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow: auto;
 }
-.content::placeholder { color: var(--muted); }
+.highlight {
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;        /* scroll is driven by the textarea on top */
+  pointer-events: none;
+}
+textarea.content {
+  z-index: 1;
+  resize: none;
+  outline: none;
+  background: transparent;               /* let the highlight layer show through */
+  color: transparent;
+  -webkit-text-fill-color: transparent;  /* iOS honors this over `color` */
+  caret-color: var(--text);
+  scrollbar-width: none;                 /* keep content width aligned with the pre */
+  -webkit-overflow-scrolling: touch;
+}
+textarea.content::-webkit-scrollbar { width: 0; height: 0; }
+.content::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
+
+/* markdown structure painted behind the textarea (headings only, for now) */
+.highlight .h1 { color: #c4b5fd; }
+.highlight .h2 { color: #a78bfa; }
+.highlight .h3 { color: #818cf8; }
+.highlight .h4, .highlight .h5, .highlight .h6 { color: var(--muted); }
 
 /* --- toast --- */
 .toast {
@@ -185,14 +221,7 @@ body.has-file #saveBtn { display: inline-block; }
   /* In editor view, show editor and hide sidebar */
   body.view-editor .sidebar { display: none; }
   body.view-editor .editor { display: flex; }
-  body.view-tree #backBtn { visibility: hidden; }
   .current-path { max-width: 36vw; }
-
-  /* On mobile the file pane and editor never show together: Save/path/dirty
-     are editor chrome, so hide them while browsing the tree. */
-  body.view-tree #saveBtn,
-  body.view-tree #currentPath,
-  body.view-tree #dirtyDot { display: none !important; }
 
   /* >=16px keeps iOS from auto-zooming when the textarea gains focus */
   .content { font-size: 16px; padding: 14px; }
@@ -202,14 +231,14 @@ body.has-file #saveBtn { display: inline-block; }
   .icon-btn { font-size: 20px; padding: 8px 10px; }
   .btn { padding: 9px 16px; font-size: 14px; }
 
-  /* bigger, easier-to-tap file tree */
-  .sidebar-head { padding: 12px 12px; }
-  .sidebar-actions .icon-btn { font-size: 22px; padding: 8px 12px; }
+  /* tap-friendly file tree */
+  .sidebar-head { padding: 0 12px; }   /* keep base height (--topbar-h) so it matches the editor topbar */
+  .sidebar-actions .icon-btn { font-size: 20px; padding: 6px 10px; }
   .tree { padding: 6px 0; }
   .tree ul { padding-left: 18px; }
-  .row { padding: 12px 10px; gap: 10px; font-size: 15px; }
+  .row { padding: 8px 10px; gap: 10px; font-size: 15px; }
   .row .twisty { width: 18px; font-size: 15px; }
   .file-row .marker { font-size: 16px; }
   .row-actions { display: flex; gap: 8px; }              /* always visible on touch */
-  .row-actions .icon-btn { font-size: 18px; padding: 8px 10px; min-width: 40px; }
+  .row-actions .icon-btn { font-size: 18px; padding: 6px 8px; min-width: 40px; }
 }

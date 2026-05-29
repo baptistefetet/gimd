@@ -8,6 +8,7 @@ const appEl = document.getElementById('app');
 const treeEl = document.getElementById('tree');
 const treeNoteEl = document.getElementById('treeNote');
 const contentEl = document.getElementById('content');
+const highlightEl = document.getElementById('highlight');
 const currentPathEl = document.getElementById('currentPath');
 const dirtyDot = document.getElementById('dirtyDot');
 const saveBtn = document.getElementById('saveBtn');
@@ -56,7 +57,7 @@ function setDirty(value) {
 }
 
 // The Save button / path / dirty dot only make sense when a file is open.
-// CSS uses body.has-file to show them (and, on mobile, only in the editor view).
+// CSS uses body.has-file to show the Save button; the whole topbar shows only in the editor view.
 function reflectCurrentFile() {
   document.body.classList.toggle('has-file', Boolean(current));
 }
@@ -74,6 +75,38 @@ function setActive(path) {
   document.querySelectorAll('.file-row').forEach((el) => {
     el.classList.toggle('active', el.dataset.path === path);
   });
+}
+
+// --- markdown highlight -----------------------------------------------------
+// A transparent <textarea> sits over the <pre> below, which paints the structure.
+// Intentionally minimal: only ATX headings (#..###### + space) get a color.
+
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderHighlight() {
+  const value = contentEl.value;
+  let html = value.split('\n').map((line) => {
+    const m = /^ {0,3}(#{1,6})[ \t]/.exec(line);
+    return m
+      ? '<span class="h' + m[1].length + '">' + escapeHtml(line) + '</span>'
+      : escapeHtml(line);
+  }).join('\n');
+  // A trailing newline leaves an empty last line in the textarea; match its height.
+  if (value.endsWith('\n')) html += ' ';
+  highlightEl.innerHTML = html;
+  syncHighlightScroll();
+}
+
+function syncHighlightScroll() {
+  highlightEl.scrollTop = contentEl.scrollTop;
+  highlightEl.scrollLeft = contentEl.scrollLeft;
+}
+
+function setEditorValue(value) {
+  contentEl.value = value;
+  renderHighlight();
 }
 
 // --- tree rendering ---------------------------------------------------------
@@ -206,7 +239,7 @@ async function openFile(path) {
   const r = await api('GET', '/api/file?path=' + encodeURIComponent(path));
   if (!r.ok) return toast((r.data && r.data.error) || 'Failed to open file', true);
   current = { path, sha: r.data.sha };
-  contentEl.value = r.data.content;
+  setEditorValue(r.data.content);
   currentPathEl.textContent = path;
   setActive(path);
   setDirty(false);
@@ -289,7 +322,7 @@ async function deleteFile(path) {
   if (!r.ok) return toast((r.data && r.data.error) || 'Delete failed', true);
   if (current && current.path === path) {
     current = null;
-    contentEl.value = '';
+    setEditorValue('');
     currentPathEl.textContent = '';
     setDirty(false);
     reflectCurrentFile();
@@ -311,7 +344,7 @@ function entriesUnder(dirPath) {
 function clearIfUnder(dirPath) {
   if (current && current.path.startsWith(dirPath + '/')) {
     current = null;
-    contentEl.value = '';
+    setEditorValue('');
     currentPathEl.textContent = '';
     setDirty(false);
     reflectCurrentFile();
@@ -384,7 +417,8 @@ async function init() {
   await loadTree();
 }
 
-contentEl.addEventListener('input', () => { if (current) setDirty(true); });
+contentEl.addEventListener('input', () => { if (current) setDirty(true); renderHighlight(); });
+contentEl.addEventListener('scroll', syncHighlightScroll);
 saveBtn.addEventListener('click', save);
 newBtn.addEventListener('click', newFile);
 newFolderBtn.addEventListener('click', newFolder);

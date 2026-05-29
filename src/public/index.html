@@ -27,19 +27,10 @@
 
   <!-- App shell -->
   <div id="app" class="app hidden">
-    <header class="topbar">
-      <button id="backBtn" class="icon-btn only-mobile" title="Files" aria-label="Files">‹</button>
-      <span class="brand">gimd</span>
-      <span id="currentPath" class="current-path"></span>
-      <span id="dirtyDot" class="dirty-dot hidden" title="Unsaved changes"></span>
-      <span class="spacer"></span>
-      <button id="saveBtn" class="btn" title="Save (Ctrl/Cmd+S)" disabled>Save</button>
-      <button id="logoutBtn" class="icon-btn" title="Sign out" aria-label="Sign out">⏻</button>
-    </header>
-
     <main class="layout">
       <aside id="sidebar" class="sidebar">
         <div class="sidebar-head">
+          <button id="logoutBtn" class="icon-btn" title="Sign out" aria-label="Sign out">⏻</button>
           <span id="repoName" class="repo-name"></span>
           <span class="sidebar-actions">
             <button id="newBtn" class="icon-btn" title="New file" aria-label="New file">+</button>
@@ -52,9 +43,19 @@
       </aside>
 
       <section class="editor">
-        <textarea id="content" class="content" spellcheck="false"
-                  placeholder="Select a file on the left, or create one with +"
-                  autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+        <header class="topbar">
+          <button id="backBtn" class="icon-btn only-mobile" title="Files" aria-label="Files">‹</button>
+          <span id="currentPath" class="current-path"></span>
+          <span id="dirtyDot" class="dirty-dot hidden" title="Unsaved changes"></span>
+          <span class="spacer"></span>
+          <button id="saveBtn" class="btn" title="Save (Ctrl/Cmd+S)" disabled>Save</button>
+        </header>
+        <div class="editor-area">
+          <pre id="highlight" class="content highlight" aria-hidden="true"></pre>
+          <textarea id="content" class="content" spellcheck="false"
+                    placeholder="Select a file on the left, or create one with +"
+                    autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+        </div>
       </section>
     </main>
   </div>
