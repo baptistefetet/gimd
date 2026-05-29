@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f14">
+  <title>gimd</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="view-tree">
+  <!-- Login screen -->
+  <section id="login" class="login hidden">
+    <div class="login-card">
+      <div class="logo">G</div>
+      <h1>gimd</h1>
+      <p>An online Markdown editor backed by your GitHub.</p>
+      <a class="btn primary" href="/auth/login">Connect GitHub</a>
+    </div>
+  </section>
+
+  <!-- App shell -->
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <button id="backBtn" class="icon-btn only-mobile" title="Files" aria-label="Files">‹</button>
+      <span class="brand">gimd</span>
+      <span id="currentPath" class="current-path"></span>
+      <span id="dirtyDot" class="dirty-dot hidden" title="Unsaved changes"></span>
+      <span class="spacer"></span>
+      <button id="saveBtn" class="btn" title="Save (Ctrl/Cmd+S)" disabled>Save</button>
+      <button id="logoutBtn" class="icon-btn" title="Sign out" aria-label="Sign out">⏻</button>
+    </header>
+
+    <main class="layout">
+      <aside id="sidebar" class="sidebar">
+        <div class="sidebar-head">
+          <span id="repoName" class="repo-name"></span>
+          <span class="sidebar-actions">
+            <button id="newBtn" class="icon-btn" title="New file" aria-label="New file">+</button>
+            <button id="reloadBtn" class="icon-btn" title="Reload" aria-label="Reload">⟳</button>
+          </span>
+        </div>
+        <div id="tree" class="tree"></div>
+        <div id="treeNote" class="tree-note hidden"></div>
+      </aside>
+
+      <section class="editor">
+        <textarea id="content" class="content" spellcheck="false"
+                  placeholder="Select a file on the left, or create one with +"
+                  autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
