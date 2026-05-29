@@ -69,6 +69,7 @@ button { font-family: inherit; }
 /* --- login --- */
 .login {
   min-height: 100vh;
+  min-height: 100dvh; /* iOS: avoid the off-center shift caused by 100vh including the URL bar */
   display: flex;
   align-items: center;
   justify-content: center;

@@ -91,10 +91,11 @@ function buildModel(entries) {
   return root;
 }
 
-function renderNode(node) {
+function renderNode(node, prefix) {
   const ul = document.createElement('ul');
 
   for (const name of [...node.dirs.keys()].sort((a, b) => a.localeCompare(b))) {
+    const dirPath = prefix ? prefix + '/' + name : name;
     const li = document.createElement('li');
     const row = document.createElement('div');
     row.className = 'row dir-row';
@@ -104,12 +105,28 @@ function renderNode(node) {
     const label = document.createElement('span');
     label.className = 'name';
     label.textContent = name;
-    row.append(twisty, label);
-    const children = renderNode(node.dirs.get(name));
-    row.addEventListener('click', () => {
+
+    const actions = document.createElement('span');
+    actions.className = 'row-actions';
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'icon-btn';
+    renameBtn.title = 'Rename folder';
+    renameBtn.textContent = '✎';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn';
+    delBtn.title = 'Delete folder';
+    delBtn.textContent = '🗑';
+    actions.append(renameBtn, delBtn);
+
+    row.append(twisty, label, actions);
+    const children = renderNode(node.dirs.get(name), dirPath);
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('.row-actions')) return;
       const collapsed = children.classList.toggle('hidden');
       twisty.textContent = collapsed ? '▸' : '▾';
     });
+    renameBtn.addEventListener('click', (ev) => { ev.stopPropagation(); renameFolder(dirPath); });
+    delBtn.addEventListener('click', (ev) => { ev.stopPropagation(); deleteFolder(dirPath); });
     li.append(row, children);
     ul.append(li);
   }
@@ -156,7 +173,7 @@ function renderNode(node) {
 
 function renderTree(entries, truncated) {
   treeEl.innerHTML = '';
-  treeEl.append(renderNode(buildModel(entries)));
+  treeEl.append(renderNode(buildModel(entries), ''));
   if (current) setActive(current.path);
   treeNoteEl.classList.toggle('hidden', !truncated);
   if (truncated) treeNoteEl.textContent = 'Repository too large to list fully.';
@@ -195,8 +212,16 @@ async function save() {
   toast('Saved');
 }
 
+// Directory of the currently open file (with trailing slash), or '' at the root.
+function currentDir() {
+  if (current && current.path.includes('/')) {
+    return current.path.slice(0, current.path.lastIndexOf('/') + 1);
+  }
+  return '';
+}
+
 async function newFile() {
-  const input = prompt('New file path (e.g. notes/idea.md):');
+  const input = prompt('New file path (e.g. notes/idea.md):', currentDir());
   if (!input) return;
   const path = input.trim().replace(/^\/+/, '');
   if (!path) return;
@@ -208,7 +233,7 @@ async function newFile() {
 }
 
 async function newFolder() {
-  const input = prompt('New folder path (e.g. projects/ideas):');
+  const input = prompt('New folder path (e.g. projects/ideas):', currentDir());
   if (!input) return;
   const dir = input.trim().replace(/^\/+/, '').replace(/\/+$/, '');
   if (!dir) return;
@@ -258,6 +283,66 @@ async function deleteFile(path) {
   await loadTree();
 }
 
+// All blob entries (including hidden .gitkeep) living under a folder path.
+function entriesUnder(dirPath) {
+  const prefix = dirPath + '/';
+  const list = [];
+  for (const e of entriesByPath.values()) {
+    if (e.type === 'blob' && e.path.startsWith(prefix)) list.push(e);
+  }
+  return list;
+}
+
+// If the open file lives under dirPath, clear the editor.
+function clearIfUnder(dirPath) {
+  if (current && current.path.startsWith(dirPath + '/')) {
+    current = null;
+    contentEl.value = '';
+    currentPathEl.textContent = '';
+    setDirty(false);
+  }
+}
+
+async function deleteFolder(dirPath) {
+  const items = entriesUnder(dirPath);
+  if (!items.length) return toast('Folder is empty or missing', true);
+  if (!confirm('Delete folder "' + dirPath + '" and all its contents?')) return;
+  const msg = 'gimd: delete folder ' + dirPath;
+  for (const e of items) {
+    const r = await api('DELETE', '/api/file', { path: e.path, sha: e.sha, message: msg });
+    if (!r.ok) { toast('Failed deleting ' + e.path, true); break; }
+  }
+  clearIfUnder(dirPath);
+  await loadTree();
+  toast('Folder deleted');
+}
+
+async function renameFolder(oldDir) {
+  const input = prompt('Rename / move folder to:', oldDir);
+  if (!input) return;
+  const newDir = input.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!newDir || newDir === oldDir) return;
+  if ((newDir + '/').startsWith(oldDir + '/')) return toast('Cannot move a folder into itself', true);
+  const items = entriesUnder(oldDir);
+  if (!items.length) return toast('Folder is empty or missing', true);
+  const msg = 'gimd: rename folder ' + oldDir + ' -> ' + newDir;
+  for (const e of items) {
+    const newPath = newDir + e.path.slice(oldDir.length); // e.path keeps its leading '/<rest>'
+    const file = await api('GET', '/api/file?path=' + encodeURIComponent(e.path));
+    if (!file.ok) return toast('Rename failed reading ' + e.path, true);
+    const created = await api('PUT', '/api/file', { path: newPath, content: file.data.content, message: msg });
+    if (!created.ok) return toast((created.data && created.data.error) || 'Rename failed', true);
+    const deleted = await api('DELETE', '/api/file', { path: e.path, sha: file.data.sha, message: msg });
+    if (!deleted.ok) toast('Moved, but could not remove ' + e.path, true);
+    if (current && current.path === e.path) {
+      current = { path: newPath, sha: created.data.sha };
+      currentPathEl.textContent = newPath;
+    }
+  }
+  await loadTree();
+  toast('Folder renamed');
+}
+
 async function logout() {
   if (dirty && !confirm('Discard unsaved changes and sign out?')) return;
   await api('POST', '/auth/logout');
@@ -302,16 +387,5 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', (e) => {
   if (dirty) { e.preventDefault(); e.returnValue = ''; }
 });
-
-// No service worker (offline isn't useful here and it caused stale assets).
-// Proactively clean up any worker/caches left over from earlier versions.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations()
-    .then((regs) => regs.forEach((r) => r.unregister()))
-    .catch(() => {});
-}
-if (window.caches) {
-  caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
-}
 
 init();

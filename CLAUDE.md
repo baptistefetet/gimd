@@ -18,8 +18,7 @@ See `README.md` for the user-facing overview.
 - **`src/public/`** — vanilla-JS frontend (`index.html`, `app.js`, `style.css`), `manifest.json` +
   icons (`icon.svg` + PNG exports) for home-screen installability. Regenerate PNGs with
   `rsvg-convert -w <size> -h <size> icon.svg -o icon-<size>.png`.
-  No service worker: offline isn't useful (notes need the network) and shell caching caused stale
-  assets. `service-worker.js` is kept only as a self-unregistering kill-switch for old clients.
+  No service worker: offline isn't useful (notes need the network) and shell caching caused stale assets.
 
 ## Auth model (single user)
 
