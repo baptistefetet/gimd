@@ -12,6 +12,7 @@ const currentPathEl = document.getElementById('currentPath');
 const dirtyDot = document.getElementById('dirtyDot');
 const saveBtn = document.getElementById('saveBtn');
 const newBtn = document.getElementById('newBtn');
+const newFolderBtn = document.getElementById('newFolderBtn');
 const reloadBtn = document.getElementById('reloadBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const backBtn = document.getElementById('backBtn');
@@ -81,7 +82,11 @@ function buildModel(entries) {
       if (!node.dirs.has(parts[i])) node.dirs.set(parts[i], { dirs: new Map(), files: [] });
       node = node.dirs.get(parts[i]);
     }
-    node.files.push({ name: parts[parts.length - 1], path: e.path });
+    const name = parts[parts.length - 1];
+    // .gitkeep only exists to keep an otherwise-empty folder; its parent dir node
+    // was created by the walk above, so the folder still shows — we just don't list it.
+    if (name === '.gitkeep') continue;
+    node.files.push({ name, path: e.path });
   }
   return root;
 }
@@ -202,6 +207,20 @@ async function newFile() {
   await openFile(path);
 }
 
+async function newFolder() {
+  const input = prompt('New folder path (e.g. projects/ideas):');
+  if (!input) return;
+  const dir = input.trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!dir) return;
+  // Git has no empty folders, so we materialize the folder with a hidden .gitkeep file.
+  const keep = dir + '/.gitkeep';
+  if (entriesByPath.has(keep)) return toast('Folder already exists', true);
+  const r = await api('PUT', '/api/file', { path: keep, content: '', message: 'gimd: create folder ' + dir });
+  if (!r.ok) return toast((r.data && r.data.error) || 'Create folder failed', true);
+  await loadTree();
+  toast('Folder created');
+}
+
 async function renameFile(oldPath) {
   const input = prompt('Rename / move to:', oldPath);
   if (!input) return;
@@ -268,6 +287,7 @@ async function init() {
 contentEl.addEventListener('input', () => { if (current) setDirty(true); });
 saveBtn.addEventListener('click', save);
 newBtn.addEventListener('click', newFile);
+newFolderBtn.addEventListener('click', newFolder);
 reloadBtn.addEventListener('click', loadTree);
 logoutBtn.addEventListener('click', logout);
 backBtn.addEventListener('click', showTreeView);

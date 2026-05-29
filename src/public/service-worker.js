@@ -3,7 +3,7 @@
 // Caches only the app shell (HTML/CSS/JS/icons) for installability and fast loads.
 // Notes are NEVER cached — every read/write goes to the network (the server proxies GitHub).
 
-const CACHE = 'gimd-shell-v1';
+const CACHE = 'gimd-shell-v2';
 const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

@@ -22,6 +22,9 @@ html, body {
   font-family: var(--mono);
   font-size: 14px;
   -webkit-text-size-adjust: 100%;
+  overflow: hidden;            /* the app owns its scroll; no page-level scroll/bounce */
+  overscroll-behavior: none;   /* kill rubber-band overscroll on mobile */
+  touch-action: manipulation;  /* remove double-tap-to-zoom */
 }
 
 .hidden { display: none !important; }
@@ -117,7 +120,7 @@ button { font-family: inherit; }
   padding: 8px 10px; border-bottom: 1px solid var(--border);
 }
 .repo-name { color: var(--muted); font-size: 12px; }
-.tree { flex: 1; overflow: auto; padding: 6px 0; }
+.tree { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 6px 0; }
 .tree-note { padding: 8px 12px; color: var(--danger); font-size: 12px; }
 
 /* tree rows */
@@ -178,6 +181,24 @@ button { font-family: inherit; }
   body.view-editor .sidebar { display: none; }
   body.view-editor .editor { display: flex; }
   body.view-tree #backBtn { visibility: hidden; }
-  .row-actions { display: flex; } /* always show on touch */
-  .current-path { max-width: 40vw; }
+  .current-path { max-width: 36vw; }
+
+  /* >=16px keeps iOS from auto-zooming when the textarea gains focus */
+  .content { font-size: 16px; padding: 14px; }
+
+  /* roomier topbar controls */
+  .topbar { gap: 8px; }
+  .icon-btn { font-size: 20px; padding: 8px 10px; }
+  .btn { padding: 9px 16px; font-size: 14px; }
+
+  /* bigger, easier-to-tap file tree */
+  .sidebar-head { padding: 12px 12px; }
+  .sidebar-actions .icon-btn { font-size: 22px; padding: 8px 12px; }
+  .tree { padding: 6px 0; }
+  .tree ul { padding-left: 18px; }
+  .row { padding: 12px 10px; gap: 10px; font-size: 15px; }
+  .row .twisty { width: 18px; font-size: 15px; }
+  .file-row .marker { font-size: 16px; }
+  .row-actions { display: flex; gap: 8px; }              /* always visible on touch */
+  .row-actions .icon-btn { font-size: 18px; padding: 8px 10px; min-width: 40px; }
 }
