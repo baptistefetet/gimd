@@ -55,6 +55,12 @@ function setDirty(value) {
   saveBtn.disabled = !(current && value);
 }
 
+// The Save button / path / dirty dot only make sense when a file is open.
+// CSS uses body.has-file to show them (and, on mobile, only in the editor view).
+function reflectCurrentFile() {
+  document.body.classList.toggle('has-file', Boolean(current));
+}
+
 function showEditorView() {
   document.body.classList.remove('view-tree');
   document.body.classList.add('view-editor');
@@ -190,6 +196,12 @@ async function loadTree() {
 }
 
 async function openFile(path) {
+  // Tapping the already-open file just returns to the editor (mobile), keeping edits.
+  if (current && current.path === path) {
+    showEditorView();
+    contentEl.focus();
+    return;
+  }
   if (dirty && !confirm('Discard unsaved changes?')) return;
   const r = await api('GET', '/api/file?path=' + encodeURIComponent(path));
   if (!r.ok) return toast((r.data && r.data.error) || 'Failed to open file', true);
@@ -198,6 +210,7 @@ async function openFile(path) {
   currentPathEl.textContent = path;
   setActive(path);
   setDirty(false);
+  reflectCurrentFile();
   showEditorView();
   contentEl.focus();
 }
@@ -279,6 +292,7 @@ async function deleteFile(path) {
     contentEl.value = '';
     currentPathEl.textContent = '';
     setDirty(false);
+    reflectCurrentFile();
   }
   await loadTree();
 }
@@ -300,6 +314,7 @@ function clearIfUnder(dirPath) {
     contentEl.value = '';
     currentPathEl.textContent = '';
     setDirty(false);
+    reflectCurrentFile();
   }
 }
 

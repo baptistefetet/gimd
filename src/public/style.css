@@ -105,6 +105,10 @@ button { font-family: inherit; }
 .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 .spacer { flex: 1; }
 
+/* Save belongs to an open file: hidden until one is opened */
+#saveBtn { display: none; }
+body.has-file #saveBtn { display: inline-block; }
+
 .layout { flex: 1; min-height: 0; display: flex; }
 
 .sidebar {
@@ -183,6 +187,12 @@ button { font-family: inherit; }
   body.view-editor .editor { display: flex; }
   body.view-tree #backBtn { visibility: hidden; }
   .current-path { max-width: 36vw; }
+
+  /* On mobile the file pane and editor never show together: Save/path/dirty
+     are editor chrome, so hide them while browsing the tree. */
+  body.view-tree #saveBtn,
+  body.view-tree #currentPath,
+  body.view-tree #dirtyDot { display: none !important; }
 
   /* >=16px keeps iOS from auto-zooming when the textarea gains focus */
   .content { font-size: 16px; padding: 14px; }
