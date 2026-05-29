@@ -1,32 +1,19 @@
 'use strict';
 
-// Caches only the app shell (HTML/CSS/JS/icons) for installability and fast loads.
-// Notes are NEVER cached — every read/write goes to the network (the server proxies GitHub).
+// gimd no longer uses a service worker (offline isn't useful here, and shell
+// caching caused stale assets). This file is a kill-switch: browsers that still
+// have an old worker registered will fetch it on their next visit, and it
+// unregisters itself + clears its caches, then reloads the page cleanly.
+// New visitors never register a worker, so they never load this file.
 
-const CACHE = 'gimd-shell-v2';
-const SHELL = ['/', '/index.html', '/style.css', '/app.js', '/manifest.json', '/icon.svg'];
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Bypass the cache entirely for API and auth: those must always hit the network.
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return;
-  if (event.request.method !== 'GET') return;
-
-  // Cache-first for the shell; fall back to the cached index when offline.
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request).catch(() => caches.match('/index.html')))
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+    await self.registration.unregister();
+    const clients = await self.clients.matchAll({ type: 'window' });
+    clients.forEach((client) => client.navigate(client.url));
+  })());
 });
