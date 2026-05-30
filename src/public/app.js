@@ -60,6 +60,7 @@ function setDirty(value) {
 // CSS uses body.has-file to show the Save button; the whole topbar shows only in the editor view.
 function reflectCurrentFile() {
   document.body.classList.toggle('has-file', Boolean(current));
+  contentEl.placeholder = current ? '' : 'Select a file on the left, or create one with +';
 }
 
 function showEditorView() {
@@ -71,10 +72,25 @@ function showTreeView() {
   document.body.classList.add('view-tree');
 }
 
+function expandPath(filePath) {
+  const parts = filePath.split('/');
+  let ancestor = '';
+  for (let i = 0; i < parts.length - 1; i++) {
+    ancestor = ancestor ? ancestor + '/' + parts[i] : parts[i];
+    const dirRow = treeEl.querySelector(`.dir-row[data-path="${ancestor}"]`);
+    if (!dirRow) continue;
+    const ul = dirRow.nextElementSibling;
+    if (ul) ul.classList.remove('hidden');
+    const twisty = dirRow.querySelector('.twisty');
+    if (twisty) twisty.textContent = '▾';
+  }
+}
+
 function setActive(path) {
   document.querySelectorAll('.file-row').forEach((el) => {
     el.classList.toggle('active', el.dataset.path === path);
   });
+  if (path) expandPath(path);
 }
 
 // --- markdown highlight -----------------------------------------------------
@@ -138,9 +154,10 @@ function renderNode(node, prefix) {
     const li = document.createElement('li');
     const row = document.createElement('div');
     row.className = 'row dir-row';
+    row.dataset.path = dirPath;
     const twisty = document.createElement('span');
     twisty.className = 'twisty';
-    twisty.textContent = '▾';
+    twisty.textContent = '▸';
     const label = document.createElement('span');
     label.className = 'name';
     label.textContent = name;
@@ -159,6 +176,7 @@ function renderNode(node, prefix) {
 
     row.append(twisty, label, actions);
     const children = renderNode(node.dirs.get(name), dirPath);
+    children.classList.add('hidden');
     row.addEventListener('click', (ev) => {
       if (ev.target.closest('.row-actions')) return;
       const collapsed = children.classList.toggle('hidden');
