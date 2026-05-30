@@ -42,16 +42,3 @@ See `README.md` for the user-facing overview.
 
 `.env` (see `.env.sample`): `PORT`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `OAUTH_CALLBACK_URL`,
 `COOKIE_SECRET`, `ALLOWED_GITHUB_LOGIN`, `NOTES_REPO`, `NODE_ENV`. `.env` is gitignored — the repo is public.
-
-## Deployment (this server)
-
-- Lives in `/var/www/gimd` (owner `www-data`), reverse-proxied by Apache at `https://gimd.pbat.ovh`.
-- systemd service `gimd` on **port 3004**, `ExecStart=/usr/bin/node src/server.js`.
-- **Single branch `main`, manual deploy** (no deploy.sh, no webhook):
-
-  ```bash
-  cd /var/www/gimd && sudo -u www-data git pull origin main
-  npm install            # only if dependencies changed
-  systemctl restart gimd
-  ```
-- Backup: only `/var/www/gimd/.env` matters (everything else is on GitHub).
