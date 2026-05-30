@@ -223,8 +223,9 @@ textarea.content::-webkit-scrollbar { width: 0; height: 0; }
   body.view-editor .editor { display: flex; }
   .current-path { max-width: 36vw; }
 
-  /* >=16px keeps iOS from auto-zooming when the textarea gains focus */
-  .content { font-size: 16px; padding: 14px; }
+  /* 14px: below the 16px iOS auto-zoom threshold, but safe — viewport
+     maximum-scale=1 means iOS cannot actually zoom (already at max scale). */
+  .content { font-size: 14px; padding: 14px; }
 
   /* roomier topbar controls */
   .topbar { gap: 8px; }
