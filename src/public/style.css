@@ -164,7 +164,7 @@ body.has-file #saveBtn { display: inline-block; }
   inset: 0;
   margin: 0;
   border: none;
-  font-family: var(--mono);
+  font-family: Consolas, "Courier New", monospace;
   font-size: 13px;
   line-height: 1.55;
   padding: 16px 18px;
