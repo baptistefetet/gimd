@@ -1,5 +1,5 @@
 {
-  "name": "gimd — GitHub Markdown",
+  "name": "gimd",
   "short_name": "gimd",
   "description": "An online Markdown editor backed by GitHub.",
   "start_url": "/",
