@@ -94,24 +94,102 @@ function setActive(path) {
 }
 
 // --- markdown highlight -----------------------------------------------------
-// A transparent <textarea> sits over the <pre> below, which paints the structure.
-// Intentionally minimal: only ATX headings (#..###### + space) get a color.
+// A transparent <textarea> sits over the <pre> below, which paints structure.
+// Block markers (headings, lists, quotes, fences) color a whole line or a
+// leading marker; inline markers (emphasis, code) color a fragment. Source
+// markers are ALWAYS kept — never stripped — so the painted layer stays exactly
+// character-aligned with the textarea above it.
 
 function escapeHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Inline tokens, scanned left-to-right on one raw line:
+//  1: `code`   2: * / ** / *** (asterisk emphasis)
+//  3: boundary char  4: _ / __ / ___ (underscore emphasis, word-bounded)
+// Underscore emphasis must sit on a word boundary so snake_case is left alone.
+// The {0,400}/{1,400} bounds cap how far each candidate scans for its closing
+// marker, keeping a worst-case line (many unmatched delimiters) linear instead
+// of O(n^2) — renderHighlight runs on every keystroke. Spans longer than ~400
+// chars simply aren't highlighted, which is fine.
+const INLINE_RE = new RegExp(
+  '(`+)[\\s\\S]{0,400}?\\1' +
+  '|(\\*\\*\\*|\\*\\*|\\*)(?=\\S)[\\s\\S]{1,400}?\\2' +
+  '|(^|[^\\w])(_{1,3})(?=\\S)[\\s\\S]{1,400}?\\4(?![\\w])',
+  'g'
+);
+
+function emphasisClass(run) {
+  return run.length === 3 ? 'md-strong md-em' : run.length === 2 ? 'md-strong' : 'md-em';
+}
+
+function formatInline(src) {
+  let out = '';
+  let last = 0;
+  let m;
+  INLINE_RE.lastIndex = 0;
+  while ((m = INLINE_RE.exec(src))) {
+    out += escapeHtml(src.slice(last, m.index));
+    if (m[1] !== undefined) {            // inline code
+      out += '<span class="md-code">' + escapeHtml(m[0]) + '</span>';
+    } else if (m[2] !== undefined) {     // *asterisk* emphasis
+      out += '<span class="' + emphasisClass(m[2]) + '">' + escapeHtml(m[0]) + '</span>';
+    } else {                             // _underscore_ emphasis (m[4])
+      out += escapeHtml(m[3]);           // re-emit the boundary char we consumed
+      out += '<span class="' + emphasisClass(m[4]) + '">'
+           + escapeHtml(m[0].slice(m[3].length)) + '</span>';
+    }
+    last = m.index + m[0].length;
+  }
+  return out + escapeHtml(src.slice(last));
+}
+
+// Paint a single line that is NOT inside a code fence.
+function renderLine(line) {
+  const h = /^ {0,3}(#{1,6})[ \t]/.exec(line);
+  if (h) return '<span class="h' + h[1].length + '">' + escapeHtml(line) + '</span>';
+
+  if (/^ {0,3}>/.test(line)) return '<span class="md-quote">' + formatInline(line) + '</span>';
+
+  if (/^ {0,3}([-*_])(?: *\1){2,} *$/.test(line)) {
+    return '<span class="md-hr">' + escapeHtml(line) + '</span>';
+  }
+
+  const list = /^(\s*)([-*+]|\d+[.)])(\s+)/.exec(line);
+  if (list) {
+    return escapeHtml(list[1]) + '<span class="md-marker">' + escapeHtml(list[2]) + '</span>'
+         + escapeHtml(list[3]) + formatInline(line.slice(list[0].length));
+  }
+
+  return formatInline(line);
+}
+
 function renderHighlight() {
   const value = contentEl.value;
-  let html = value.split('\n').map((line) => {
-    const m = /^ {0,3}(#{1,6})[ \t]/.exec(line);
-    return m
-      ? '<span class="h' + m[1].length + '">' + escapeHtml(line) + '</span>'
-      : escapeHtml(line);
+  let inFence = false;
+  let fenceChar = '';
+  let fenceLen = 0;
+  const html = value.split('\n').map((line) => {
+    // ``` or ~~~ (>=3) toggles a fenced code block; everything inside is code,
+    // so no markdown is highlighted there (a `# foo` Python comment stays plain).
+    // A closing fence must be the same char, at least as long as the opener, and
+    // carry no trailing text (CommonMark) — otherwise it's just a line of code.
+    const fence = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (fence) {
+      const char = fence[1][0];
+      const len = fence[1].length;
+      if (!inFence) {
+        inFence = true; fenceChar = char; fenceLen = len;
+      } else if (char === fenceChar && len >= fenceLen && fence[2].trim() === '') {
+        inFence = false;
+      }
+      return '<span class="md-code">' + escapeHtml(line) + '</span>';
+    }
+    if (inFence) return '<span class="md-code">' + escapeHtml(line) + '</span>';
+    return renderLine(line);
   }).join('\n');
   // A trailing newline leaves an empty last line in the textarea; match its height.
-  if (value.endsWith('\n')) html += ' ';
-  highlightEl.innerHTML = html;
+  highlightEl.innerHTML = value.endsWith('\n') ? html + ' ' : html;
   syncHighlightScroll();
 }
 

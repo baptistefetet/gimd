@@ -193,11 +193,18 @@ textarea.content {
 textarea.content::-webkit-scrollbar { width: 0; height: 0; }
 .content::placeholder { color: var(--muted); -webkit-text-fill-color: var(--muted); }
 
-/* markdown structure painted behind the textarea (headings only, for now) */
+/* markdown structure painted behind the textarea */
 .highlight .h1 { color: #c4b5fd; }
 .highlight .h2 { color: #a78bfa; }
 .highlight .h3 { color: #818cf8; }
 .highlight .h4, .highlight .h5, .highlight .h6 { color: var(--muted); }
+.highlight .md-strong { color: #ff9e64; font-weight: 700; }       /* bold: color + weight */
+.highlight .md-em { color: #e0af68; font-style: italic; }         /* italic */
+.highlight .md-strong.md-em { color: #ff9e64; }                   /* keeps both weight & style */
+.highlight .md-code { color: #9ece6a; }                           /* inline + fenced code */
+.highlight .md-marker { color: #7aa2f7; font-weight: 700; }       /* list bullets / numbers */
+.highlight .md-quote { color: var(--muted); font-style: italic; } /* > blockquote */
+.highlight .md-hr { color: var(--muted); }                        /* --- thematic break */
 
 /* --- toast --- */
 .toast {
