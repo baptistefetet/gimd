@@ -11,11 +11,11 @@ See `README.md` for the user-facing overview.
 ## Architecture
 
 - **Stack**: native Node `http` (no framework), single dependency `dotenv`. Node ≥ 18 (native `fetch`, `crypto`).
-- **`src/server.js`** — entrypoint. Routing, OAuth (login/callback/logout), AES-256-GCM encryption of the
-  session cookie, static file serving from `src/public/`.
+- **`src/index.js`** — entrypoint. Routing, OAuth (login/callback/logout), AES-256-GCM encryption of the
+  session cookie, static file serving from `public/`.
 - **`src/github.js`** — GitHub REST helpers (`getUser`, `ensureRepo`, `getTree`, `getFile`, `putFile`,
   `deleteFile`). Throws `GitHubError` carrying the HTTP status.
-- **`src/public/`** — vanilla-JS frontend (`index.html`, `app.js`, `style.css`), `manifest.json` +
+- **`public/`** — vanilla-JS frontend (`index.html`, `app.js`, `style.css`), `manifest.json` +
   icons (`icon.svg` + PNG exports) for home-screen installability. Regenerate PNGs with
   `rsvg-convert -w <size> -h <size> icon.svg -o icon-<size>.png`.
   No service worker: offline isn't useful (notes need the network) and shell caching caused stale assets.

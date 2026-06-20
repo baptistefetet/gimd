@@ -4,9 +4,9 @@
   "description": "GitHub Markdown — an online Markdown editor that uses GitHub for auth, storage and sync.",
   "license": "MIT",
   "type": "commonjs",
-  "main": "src/server.js",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/index.js"
   },
   "engines": {
     "node": ">=18"

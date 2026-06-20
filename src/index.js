@@ -44,7 +44,7 @@ if (missing.length) {
   process.exit(1);
 }
 
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
 const SESSION_COOKIE = 'gimd_session';
 const STATE_COOKIE = 'gimd_oauth_state';
 const SESSION_MAX_AGE = 90 * 24 * 60 * 60; // 90 days

@@ -59,9 +59,9 @@ Requirements: **Node.js ≥ 18** (uses the native `fetch`).
 
 ```
 src/
-  server.js        HTTP server: routing, OAuth, cookie encryption, static files
+  index.js         HTTP server entrypoint: routing, OAuth, cookie encryption
   github.js        GitHub REST helpers (auth'd with the user token)
-  public/          frontend (vanilla JS) + PWA assets + icons
+public/            frontend (vanilla JS) + PWA assets + icons
 ```
 
 ## Scope / non-goals (v1)
