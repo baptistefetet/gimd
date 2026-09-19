@@ -1,4 +1,4 @@
-# CLAUDE.md — gimd
+# AGENTS.md — gimd
 
 > All code, comments, UI strings, docs and commit messages in this project are in **English**.
 
