@@ -423,7 +423,9 @@ async function openFile(path, force) {
     renderTree();
     return toast('File not found on GitHub', true);
   }
-  current = { path, sha: doc.sha };
+  // original = GitHub content at `sha`: editing back to it (e.g. Ctrl+Z) clears the draft.
+  current = { path, sha: doc.sha, original: r.ok ? r.data.content : null };
+  if (doc.content === current.original) dropDraft(path);
   setEditorValue(doc.content);
   currentPathEl.textContent = path;
   setActive(path);
@@ -443,7 +445,7 @@ async function commitDraft(path) {
   const now = getDraft(path);
   if (now && now.content === d.content) dropDraft(path);
   else if (now) setDraft(path, { sha: r.data.sha, content: now.content });
-  if (current && current.path === path) current.sha = r.data.sha;
+  if (current && current.path === path) Object.assign(current, { sha: r.data.sha, original: d.content });
   entriesByPath.set(path, { path, type: 'blob', sha: r.data.sha });
   return r;
 }
@@ -532,7 +534,7 @@ async function renameFile(oldPath) {
 
   moveDraft(oldPath, newPath, file.data.sha, created.data.sha);
   if (current && current.path === oldPath) {
-    current = { path: newPath, sha: (getDraft(newPath) || created.data).sha };
+    current = { ...current, path: newPath, sha: (getDraft(newPath) || created.data).sha };
     currentPathEl.textContent = newPath;
   }
   await loadTree();
@@ -606,7 +608,7 @@ async function renameFolder(oldDir) {
     if (!deleted.ok) toast('Moved, but could not remove ' + e.path, true);
     moveDraft(e.path, newPath, file.data.sha, created.data.sha);
     if (current && current.path === e.path) {
-      current = { path: newPath, sha: (getDraft(newPath) || created.data).sha };
+      current = { ...current, path: newPath, sha: (getDraft(newPath) || created.data).sha };
       currentPathEl.textContent = newPath;
     }
   }
@@ -643,12 +645,14 @@ async function init() {
 }
 
 // Every keystroke is persisted: switching files or closing the window loses nothing.
+// Content back to GitHub's version (e.g. Ctrl+Z) means no draft.
 contentEl.addEventListener('input', () => {
   renderHighlight();
   if (!current) return;
   const wasDirty = Boolean(getDraft(current.path));
-  setDraft(current.path, { sha: current.sha, content: contentEl.value });
-  if (!wasDirty) refreshDirty();
+  if (contentEl.value === current.original) dropDraft(current.path);
+  else setDraft(current.path, { sha: current.sha, content: contentEl.value });
+  if (wasDirty !== Boolean(getDraft(current.path))) refreshDirty();
 });
 contentEl.addEventListener('scroll', syncHighlightScroll);
 saveBtn.addEventListener('click', save);
