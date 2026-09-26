@@ -37,6 +37,11 @@ See `README.md` for the user-facing overview.
 - A stale `sha` → GitHub 409/422 → surfaced to the client as **409** ("This file changed on GitHub, reload.")
   to avoid clobbering changes made elsewhere (other device, AI agent).
 - Rename = create-new + delete-old (two commits); no atomic rename in v1.
+- Unsaved edits are **drafts** in `localStorage`, one key per file (`gimd:draft:<path>` → `{ sha, content }`),
+  written on every keystroke: switching files or closing the window (no reliable `beforeunload` in Safari) loses
+  nothing. Save commits the open file; Save all commits each draft separately (one commit per file).
+  A draft whose `sha` no longer matches GitHub (on open, or after a 409 on save) prompts: load GitHub's version,
+  or keep the draft rebased on GitHub's `sha` (next save overwrites). Drafts of files missing on GitHub still get a tree row.
 
 ## Config
 

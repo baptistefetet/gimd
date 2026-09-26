@@ -107,9 +107,9 @@ body.view-editor .topbar { display: flex; }
 .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 .spacer { flex: 1; }
 
-/* Save belongs to an open file: hidden until one is opened */
-#saveBtn { display: none; }
-body.has-file #saveBtn { display: inline-block; }
+/* Save buttons belong to an open file: hidden until one is opened */
+#saveBtn, #saveAllBtn { display: none; }
+body.has-file #saveBtn, body.has-file #saveAllBtn { display: inline-block; }
 
 .layout { flex: 1; min-height: 0; display: flex; }
 
@@ -148,6 +148,9 @@ body.has-file #saveBtn { display: inline-block; }
 .file-row.active { background: var(--accent-dim); color: #fff; }
 .file-row .marker { color: var(--accent); }
 .dir-row .name { color: var(--text); }
+.row .dirty-dot { width: 6px; height: 6px; }
+.row:not(.dirty) .dirty-dot { display: none; }
+.file-row.active .dirty-dot { background: #fff; }
 .row-actions { margin-left: auto; display: none; gap: 2px; }
 .row:hover .row-actions { display: flex; }
 .row-actions .icon-btn { font-size: 13px; padding: 2px 5px; }

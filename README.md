@@ -20,7 +20,9 @@ AI agents — can read or edit them with plain repo access, no extra configurati
 3. On first use, a private repository (default name `gimd-notes`) is **created automatically** if it doesn't exist.
 4. Listing the tree, opening, saving (commit), and deleting all go through the GitHub Contents API.
 5. Each open file tracks its blob `sha`. If the file changed on GitHub meanwhile (another device, an
-   AI agent…), saving returns a conflict instead of silently overwriting — reload to get the latest.
+   AI agent…), saving asks whether to keep your edits or load GitHub's version instead of silently overwriting.
+6. Unsaved edits are kept as drafts in the browser (`localStorage`): you can switch files freely, close the
+   window and come back later. **Save all** commits every modified file (one commit each).
 
 This is a **single-user** instance: only the GitHub login configured in `ALLOWED_GITHUB_LOGIN` is allowed in.
 

@@ -1,7 +1,7 @@
 'use strict';
 
 // gimd frontend: talks only to our own server (which proxies GitHub).
-// No persistence in the browser; unsaved edits are lost on refresh by design.
+// Unsaved edits are kept as per-file drafts in localStorage until committed.
 
 const loginEl = document.getElementById('login');
 const appEl = document.getElementById('app');
@@ -12,6 +12,7 @@ const highlightEl = document.getElementById('highlight');
 const currentPathEl = document.getElementById('currentPath');
 const dirtyDot = document.getElementById('dirtyDot');
 const saveBtn = document.getElementById('saveBtn');
+const saveAllBtn = document.getElementById('saveAllBtn');
 const newBtn = document.getElementById('newBtn');
 const newFolderBtn = document.getElementById('newFolderBtn');
 const reloadBtn = document.getElementById('reloadBtn');
@@ -21,8 +22,9 @@ const repoNameEl = document.getElementById('repoName');
 const toastEl = document.getElementById('toast');
 
 let entriesByPath = new Map(); // path -> { path, type, sha }
-let current = null;            // { path, sha }
-let dirty = false;
+let treeTruncated = false;
+let current = null;            // { path, sha }: sha = GitHub version the editor content is based on
+let busy = false;              // a save is in flight
 
 // --- helpers ----------------------------------------------------------------
 
@@ -32,7 +34,8 @@ async function api(method, url, body) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(url, opts);
+  let res;
+  try { res = await fetch(url, opts); } catch (_) { return { ok: false, status: 0, data: { error: 'Network error' } }; }
   let data = null;
   const text = await res.text();
   if (text) {
@@ -50,17 +53,64 @@ function toast(message, isError) {
   toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 3000);
 }
 
-function setDirty(value) {
-  dirty = value;
-  dirtyDot.classList.toggle('hidden', !value);
-  saveBtn.disabled = !(current && value);
+// --- drafts -----------------------------------------------------------------
+// One localStorage key per file ({ sha, content }), so several windows editing
+// different files don't overwrite each other. A draft exists = the file is modified.
+
+const DRAFT_PREFIX = 'gimd:draft:';
+
+function getDraft(path) {
+  try { return JSON.parse(localStorage.getItem(DRAFT_PREFIX + path)); } catch (_) { return null; }
+}
+function setDraft(path, draft) {
+  try { localStorage.setItem(DRAFT_PREFIX + path, JSON.stringify(draft)); }
+  catch (_) { toast('Could not store the draft locally', true); }
+}
+function dropDraft(path) {
+  localStorage.removeItem(DRAFT_PREFIX + path);
+}
+function draftPaths() {
+  return Object.keys(localStorage).filter((k) => k.startsWith(DRAFT_PREFIX)).map((k) => k.slice(DRAFT_PREFIX.length));
 }
 
-// The Save button / path / dirty dot only make sense when a file is open.
-// CSS uses body.has-file to show the Save button; the whole topbar shows only in the editor view.
+// Moves a draft along with its renamed file. A draft based on an outdated version
+// keeps its stale sha, so saving it still conflicts instead of clobbering GitHub.
+function moveDraft(oldPath, newPath, oldSha, newSha) {
+  const d = getDraft(oldPath);
+  if (!d) return;
+  dropDraft(oldPath);
+  setDraft(newPath, { sha: d.sha === oldSha ? newSha : d.sha, content: d.content });
+}
+
+// Sync every "modified" indicator: topbar dot, Save buttons, tree dots
+// (a folder gets a dot when it contains a modified file).
+function refreshDirty() {
+  const paths = draftPaths();
+  const set = new Set(paths);
+  const isDirty = Boolean(current && set.has(current.path));
+  dirtyDot.classList.toggle('hidden', !isDirty);
+  saveBtn.disabled = !isDirty;
+  saveAllBtn.disabled = !paths.length;
+  treeEl.querySelectorAll('.row').forEach((el) => {
+    const p = el.dataset.path;
+    const dirty = el.classList.contains('dir-row') ? paths.some((d) => d.startsWith(p + '/')) : set.has(p);
+    el.classList.toggle('dirty', dirty);
+  });
+}
+
+// The Save buttons / path / dirty dot only make sense when a file is open.
+// CSS uses body.has-file to show the Save buttons; the whole topbar shows only in the editor view.
 function reflectCurrentFile() {
   document.body.classList.toggle('has-file', Boolean(current));
   contentEl.placeholder = current ? '' : 'Select a file on the left, or create one with +';
+}
+
+function closeEditor() {
+  current = null;
+  setEditorValue('');
+  currentPathEl.textContent = '';
+  refreshDirty();
+  reflectCurrentFile();
 }
 
 function showEditorView() {
@@ -224,6 +274,13 @@ function buildModel(entries) {
   return root;
 }
 
+// Dot shown by CSS when the row has the .dirty class.
+function dirtyMark() {
+  const dot = document.createElement('span');
+  dot.className = 'dirty-dot';
+  return dot;
+}
+
 function renderNode(node, prefix) {
   const ul = document.createElement('ul');
 
@@ -252,7 +309,7 @@ function renderNode(node, prefix) {
     delBtn.textContent = '🗑';
     actions.append(renameBtn, delBtn);
 
-    row.append(twisty, label, actions);
+    row.append(twisty, label, dirtyMark(), actions);
     const children = renderNode(node.dirs.get(name), dirPath);
     children.classList.add('hidden');
     row.addEventListener('click', (ev) => {
@@ -291,7 +348,7 @@ function renderNode(node, prefix) {
     delBtn.textContent = '🗑';
     actions.append(renameBtn, delBtn);
 
-    row.append(marker, label, actions);
+    row.append(marker, label, dirtyMark(), actions);
     row.addEventListener('click', (ev) => {
       if (ev.target.closest('.row-actions')) return;
       openFile(file.path);
@@ -306,12 +363,17 @@ function renderNode(node, prefix) {
   return ul;
 }
 
-function renderTree(entries, truncated) {
+// Drafts whose file is missing on GitHub (deleted elsewhere) still get a row,
+// so they can be opened and resolved.
+function renderTree() {
+  const entries = [...entriesByPath.values()];
+  for (const p of draftPaths()) if (!entriesByPath.has(p)) entries.push({ path: p, type: 'blob' });
   treeEl.innerHTML = '';
   treeEl.append(renderNode(buildModel(entries), ''));
   if (current) setActive(current.path);
-  treeNoteEl.classList.toggle('hidden', !truncated);
-  if (truncated) treeNoteEl.textContent = 'Repository too large to list fully.';
+  treeNoteEl.classList.toggle('hidden', !treeTruncated);
+  if (treeTruncated) treeNoteEl.textContent = 'Repository too large to list fully.';
+  refreshDirty();
 }
 
 // --- data operations --------------------------------------------------------
@@ -321,37 +383,102 @@ async function loadTree() {
   if (!r.ok) return toast((r.data && r.data.error) || 'Failed to load files', true);
   entriesByPath = new Map();
   for (const e of r.data.entries) entriesByPath.set(e.path, e);
-  renderTree(r.data.entries, r.data.truncated);
+  treeTruncated = r.data.truncated;
+  renderTree();
 }
 
-async function openFile(path) {
-  // Tapping the already-open file just returns to the editor (mobile), keeping edits.
-  if (current && current.path === path) {
+// Resolves the draft of `path` against GitHub's version (`remote`, null if the
+// file doesn't exist there). Returns the { sha, content } to edit, or null.
+function reconcile(path, remote) {
+  const draft = getDraft(path);
+  const remoteSha = remote ? remote.sha : null;
+  if (!draft || draft.sha === remoteSha) return draft || remote;
+  const question = remote
+    ? `"${path}" changed on GitHub since your unsaved edits.\n\n`
+      + 'OK: discard your edits and load the GitHub version.\nCancel: keep your edits (saving will overwrite GitHub).'
+    : `"${path}" was deleted on GitHub since your unsaved edits.\n\n`
+      + 'OK: discard your edits.\nCancel: keep your edits (saving will recreate the file).';
+  if (confirm(question)) {
+    dropDraft(path);
+    return remote;
+  }
+  const kept = { sha: remoteSha, content: draft.content };
+  setDraft(path, kept);
+  return kept;
+}
+
+// `force` reloads even if `path` is already open (used after a save conflict).
+async function openFile(path, force) {
+  // Tapping the already-open file just returns to the editor (mobile).
+  if (!force && current && current.path === path) {
     showEditorView();
     contentEl.focus();
     return;
   }
-  if (dirty && !confirm('Discard unsaved changes?')) return;
   const r = await api('GET', '/api/file?path=' + encodeURIComponent(path));
-  if (!r.ok) return toast((r.data && r.data.error) || 'Failed to open file', true);
-  current = { path, sha: r.data.sha };
-  setEditorValue(r.data.content);
+  if (!r.ok && r.status !== 404) return toast((r.data && r.data.error) || 'Failed to open file', true);
+  const doc = reconcile(path, r.ok ? r.data : null);
+  if (!doc) {
+    if (current && current.path === path) closeEditor();
+    renderTree();
+    return toast('File not found on GitHub', true);
+  }
+  current = { path, sha: doc.sha };
+  setEditorValue(doc.content);
   currentPathEl.textContent = path;
   setActive(path);
-  setDirty(false);
+  refreshDirty();
   reflectCurrentFile();
   showEditorView();
   contentEl.focus();
 }
 
+// Commits one draft (one commit). If the file was edited while the request was
+// in flight, the draft stays, rebased on the new version.
+async function commitDraft(path) {
+  const d = getDraft(path);
+  if (!d) return { ok: true }; // discarded meanwhile (e.g. during Save all)
+  const r = await api('PUT', '/api/file', { path, content: d.content, sha: d.sha });
+  if (!r.ok) return r;
+  const now = getDraft(path);
+  if (now && now.content === d.content) dropDraft(path);
+  else if (now) setDraft(path, { sha: r.data.sha, content: now.content });
+  if (current && current.path === path) current.sha = r.data.sha;
+  entriesByPath.set(path, { path, type: 'blob', sha: r.data.sha });
+  return r;
+}
+
 async function save() {
-  if (!current || !dirty) return;
-  const r = await api('PUT', '/api/file', { path: current.path, content: contentEl.value, sha: current.sha });
-  if (r.status === 409) return toast('This file changed on GitHub, reload.', true);
+  if (busy || !current || !getDraft(current.path)) return;
+  const path = current.path;
+  busy = true;
+  const r = await commitDraft(path);
+  busy = false;
+  refreshDirty();
+  if (r.status === 409) {
+    // Let the user choose between their edits and GitHub's version.
+    if (current && current.path === path) await openFile(path, true);
+    return;
+  }
   if (!r.ok) return toast((r.data && r.data.error) || 'Save failed', true);
-  current.sha = r.data.sha;
-  setDirty(false);
   toast('Saved');
+}
+
+// One commit per modified file. Failed files keep their draft (and their dot);
+// opening or saving one alone shows the conflict popup.
+async function saveAll() {
+  const paths = draftPaths();
+  if (busy || !paths.length) return;
+  busy = true;
+  const failed = [];
+  for (const p of paths) {
+    const r = await commitDraft(p);
+    if (!r.ok) failed.push(p);
+  }
+  busy = false;
+  refreshDirty();
+  if (failed.length) return toast('Not saved: ' + failed.join(', ') + '. Open and save each one to resolve.', true);
+  toast(paths.length > 1 ? paths.length + ' files saved' : 'Saved');
 }
 
 // Directory of the currently open file (with trailing slash), or '' at the root.
@@ -393,7 +520,7 @@ async function renameFile(oldPath) {
   if (!input) return;
   const newPath = input.trim().replace(/^\/+/, '');
   if (!newPath || newPath === oldPath) return;
-  if (entriesByPath.has(newPath)) return toast('Target already exists', true);
+  if (entriesByPath.has(newPath) || getDraft(newPath)) return toast('Target already exists', true);
 
   const file = await api('GET', '/api/file?path=' + encodeURIComponent(oldPath));
   if (!file.ok) return toast('Rename failed (could not read source)', true);
@@ -403,8 +530,9 @@ async function renameFile(oldPath) {
   const deleted = await api('DELETE', '/api/file', { path: oldPath, sha: file.data.sha, message: msg });
   if (!deleted.ok) toast('Renamed, but original could not be removed', true);
 
+  moveDraft(oldPath, newPath, file.data.sha, created.data.sha);
   if (current && current.path === oldPath) {
-    current = { path: newPath, sha: created.data.sha };
+    current = { path: newPath, sha: (getDraft(newPath) || created.data).sha };
     currentPathEl.textContent = newPath;
   }
   await loadTree();
@@ -412,17 +540,15 @@ async function renameFile(oldPath) {
 
 async function deleteFile(path) {
   const entry = entriesByPath.get(path);
-  if (!entry) return;
-  if (!confirm('Delete ' + path + ' ?')) return;
-  const r = await api('DELETE', '/api/file', { path, sha: entry.sha });
-  if (!r.ok) return toast((r.data && r.data.error) || 'Delete failed', true);
-  if (current && current.path === path) {
-    current = null;
-    setEditorValue('');
-    currentPathEl.textContent = '';
-    setDirty(false);
-    reflectCurrentFile();
+  const hasDraft = Boolean(getDraft(path));
+  if (!entry && !hasDraft) return;
+  if (!confirm('Delete ' + path + ' ?' + (hasDraft ? ' Unsaved edits will be lost.' : ''))) return;
+  if (entry) {
+    const r = await api('DELETE', '/api/file', { path, sha: entry.sha });
+    if (!r.ok) return toast((r.data && r.data.error) || 'Delete failed', true);
   }
+  dropDraft(path);
+  if (current && current.path === path) closeEditor();
   await loadTree();
 }
 
@@ -438,23 +564,20 @@ function entriesUnder(dirPath) {
 
 // If the open file lives under dirPath, clear the editor.
 function clearIfUnder(dirPath) {
-  if (current && current.path.startsWith(dirPath + '/')) {
-    current = null;
-    setEditorValue('');
-    currentPathEl.textContent = '';
-    setDirty(false);
-    reflectCurrentFile();
-  }
+  if (current && current.path.startsWith(dirPath + '/')) closeEditor();
 }
 
 async function deleteFolder(dirPath) {
   const items = entriesUnder(dirPath);
   if (!items.length) return toast('Folder is empty or missing', true);
-  if (!confirm('Delete folder "' + dirPath + '" and all its contents?')) return;
+  const hasDrafts = draftPaths().some((p) => p.startsWith(dirPath + '/'));
+  if (!confirm('Delete folder "' + dirPath + '" and all its contents?'
+    + (hasDrafts ? ' Unsaved edits inside will be lost.' : ''))) return;
   const msg = 'gimd: delete folder ' + dirPath;
   for (const e of items) {
     const r = await api('DELETE', '/api/file', { path: e.path, sha: e.sha, message: msg });
     if (!r.ok) { toast('Failed deleting ' + e.path, true); break; }
+    dropDraft(e.path);
   }
   clearIfUnder(dirPath);
   await loadTree();
@@ -469,6 +592,9 @@ async function renameFolder(oldDir) {
   if ((newDir + '/').startsWith(oldDir + '/')) return toast('Cannot move a folder into itself', true);
   const items = entriesUnder(oldDir);
   if (!items.length) return toast('Folder is empty or missing', true);
+  if (items.some((e) => getDraft(newDir + e.path.slice(oldDir.length)))) {
+    return toast('Target has unsaved files with the same names', true);
+  }
   const msg = 'gimd: rename folder ' + oldDir + ' -> ' + newDir;
   for (const e of items) {
     const newPath = newDir + e.path.slice(oldDir.length); // e.path keeps its leading '/<rest>'
@@ -478,8 +604,9 @@ async function renameFolder(oldDir) {
     if (!created.ok) return toast((created.data && created.data.error) || 'Rename failed', true);
     const deleted = await api('DELETE', '/api/file', { path: e.path, sha: file.data.sha, message: msg });
     if (!deleted.ok) toast('Moved, but could not remove ' + e.path, true);
+    moveDraft(e.path, newPath, file.data.sha, created.data.sha);
     if (current && current.path === e.path) {
-      current = { path: newPath, sha: created.data.sha };
+      current = { path: newPath, sha: (getDraft(newPath) || created.data).sha };
       currentPathEl.textContent = newPath;
     }
   }
@@ -488,7 +615,9 @@ async function renameFolder(oldDir) {
 }
 
 async function logout() {
-  if (dirty && !confirm('Discard unsaved changes and sign out?')) return;
+  const drafts = draftPaths();
+  if (drafts.length && !confirm('Discard unsaved edits (' + drafts.length + ' file(s)) and sign out?')) return;
+  drafts.forEach(dropDraft);
   await api('POST', '/auth/logout');
   location.reload();
 }
@@ -513,9 +642,17 @@ async function init() {
   await loadTree();
 }
 
-contentEl.addEventListener('input', () => { if (current) setDirty(true); renderHighlight(); });
+// Every keystroke is persisted: switching files or closing the window loses nothing.
+contentEl.addEventListener('input', () => {
+  renderHighlight();
+  if (!current) return;
+  const wasDirty = Boolean(getDraft(current.path));
+  setDraft(current.path, { sha: current.sha, content: contentEl.value });
+  if (!wasDirty) refreshDirty();
+});
 contentEl.addEventListener('scroll', syncHighlightScroll);
 saveBtn.addEventListener('click', save);
+saveAllBtn.addEventListener('click', saveAll);
 newBtn.addEventListener('click', newFile);
 newFolderBtn.addEventListener('click', newFolder);
 reloadBtn.addEventListener('click', loadTree);
@@ -529,8 +666,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-window.addEventListener('beforeunload', (e) => {
-  if (dirty) { e.preventDefault(); e.returnValue = ''; }
-});
+// Another gimd window changed the drafts.
+window.addEventListener('storage', refreshDirty);
 
 init();
