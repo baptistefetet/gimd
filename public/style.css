@@ -209,15 +209,20 @@ textarea.content::-webkit-scrollbar { width: 0; height: 0; }
 .highlight .md-quote { color: var(--muted); font-style: italic; } /* > blockquote */
 .highlight .md-hr { color: var(--muted); }                        /* --- thematic break */
 
-/* --- toast --- */
+/* --- toast: just below the top bars, near the action buttons --- */
 .toast {
   position: fixed;
-  left: 50%; bottom: 24px; transform: translateX(-50%);
+  left: 50%; top: calc(var(--topbar-h) + env(safe-area-inset-top, 0px) + 8px); transform: translateX(-50%);
   background: var(--panel); color: var(--text);
   border: 1px solid var(--border); border-left: 3px solid var(--accent);
   padding: 10px 16px; border-radius: 8px; font-size: 13px;
-  max-width: 90vw; z-index: 10;
+  width: max-content; max-width: 90vw; z-index: 10;  /* max-content: left:50% would otherwise halve the width */
+  animation: toast-in 0.2s ease-out;  /* replays each time .hidden is removed */
 }
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+}
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 .toast.error { border-left-color: var(--danger); }
 
 .only-mobile { display: none; }
